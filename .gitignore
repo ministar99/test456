@@ -1,0 +1,23 @@
+.venv/
+venv/
+env/
+
+# 2. 파이썬 컴파일 및 캐시 파일
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# 3. 환경 변수 파일 (비밀번호, API 키 등)
+.env
+*.env
+
+# 4. OS 및 IDE 설정
+.DS_Store
+.vscode/
+.idea/
+
+# 5. 배포 및 빌드 관련
+dist/
+build/
+*.egg-info/
