@@ -68,5 +68,5 @@ jobs:
         run: |
           echo "--- 최종 도메인(starmin.store/health) 확인 ---"
           sleep 5
-          curl -fsS --retry 3 http://starmin.store/health || (echo "❌ 최종 배포 확인 실패" && exit 1)
+          curl -fsS --retry 3 http://starmin.shop/health || (echo "❌ 최종 배포 확인 실패" && exit 1)
           echo "✅ 모든 테스트 통과! 자동 배포 완료"
