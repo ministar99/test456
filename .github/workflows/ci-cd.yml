@@ -1,72 +1,60 @@
-name: FastAPI Bastion Tunnel Deploy
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [ main ]
 
+env:
+  PYTHON_VERSION: '3.11'
+  FASTAPI_DIR: /home/ubuntu/FastAPI
+  VENV_DIR: /home/ubuntu/FastAPI/.venv
+  FASTAPI_PORT: 8000
+
 jobs:
-  deploy:
+  deploy_and_test:
     runs-on: ubuntu-latest
     steps:
-      - name: 소스 체크아웃
-        uses: actions/checkout@v3
+      name: Deploy & Test via Bastion
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.BASTION_IP }}
+        username: ubuntu
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          echo "=== Deploy to FastAPI (via Bastion) ==="
 
-      # 1. Bastion을 경유하여 파이썬(WAS) 서버 배포
-      - name: WAS 서버 배포 (via Bastion)
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          # Bastion 정보
-          proxy_host: ${{ secrets.BASTION_PUBLIC_IP }}
-          proxy_username: ubuntu
-          proxy_key: ${{ secrets.EC2_SSH_KEY }}
-          # WAS 내부 IP 정보
-          host: ${{ secrets.WAS_PRIVATE_IP }}
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            cd ~/FastAPI
-            git pull origin main
-            # 서비스 재시작
-            # sudo systemctl restart fastapi.service
+            ssh -o StrictHostKeyChecking=no \
+                -J ubuntu@${{ secrets.BASTION_IP }} \
+                ubuntu@${{ secrets.FASTAPI_PRIVATE_IP }} << 'EOF'
 
-            # 1. 가상환경 활성화
-            source .venv/bin/activate
-            pip install -r requirements.txt
+              set -e
+              cd /home/ubuntu/testfast
 
-            # 2. 8000번 포트를 사용 중인 기존 프로세스 종료
-            # (-k: kill, -n tcp: tcp 포트 지정)
-            sudo fuser -k 8000/tcp || true
+              echo "1. Git pull"
+              git pull origin main
 
-            # 3. nohup으로 FastAPI 서버 백그라운드 실행
-            # (로그는 server.log에 저장하고, 터미널을 꺼도 프로세스가 유지되게 함)
-            nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+              echo "2. Activate venv"
+              source venv/bin/activate
 
-      # 2. 배포 결과 테스트 (WAS 단독 / Nginx 경유 / 도메인 헬스체크)
-      - name: 통합 테스트 및 헬스체크
-        run: |
-          echo "--- 1. WAS 서버 직접 응답 확인 ---"
-          # Bastion을 거쳐 WAS 내부 IP로 직접 curl (SSH 터널링 사용 시나리오)
-          # 여기서는 외부에서 접근 가능한 경로가 없으므로 다시 SSH 접속하여 테스트 수행
-          
-      - name: WAS & Nginx 응답 테스트 (via Bastion)
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          proxy_host: ${{ secrets.BASTION_PUBLIC_IP }}
-          proxy_username: ubuntu
-          proxy_key: ${{ secrets.EC2_SSH_KEY }}
-          host: ${{ secrets.BASTION_PUBLIC_IP }} # Bastion에서 명령어 실행
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "--- WAS 내부 IP 테스트 ---"
-            curl -fsS http://${{ secrets.WAS_PRIVATE_IP }}:8000/ || (echo "WAS 응답 실패" && exit 1)
-            
-            echo "--- Nginx 내부 IP 테스트 ---"
-            curl -fsS http://${{ secrets.NGINX_PRIVATE_IP }}:80/ || (echo "Nginx 응답 실패" && exit 1)
+              echo "3. Install requirements"
+              pip install -r requirements.txt
 
-      - name: 최종 도메인 헬스체크
-        run: |
-          echo "--- 최종 도메인(starmin.store/health) 확인 ---"
-          sleep 5
-          curl -fsS --retry 3 http://starmin.shop/health || (echo "❌ 최종 배포 확인 실패" && exit 1)
-          echo "✅ 모든 테스트 통과! 자동 배포 완료"
+              echo "4. Restart FastAPI"
+              sudo fuser -k 8000/tcp || true
+              nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > server.log 2>&1 &
+
+              sleep 3
+
+              echo "5. Local FastAPI health check"
+              curl -f http://127.0.0.1:8000/ || exit 1
+
+            EOF
+
+            echo "=== FastAPI OK ==="
+
+            echo "=== Nginx → FastAPI Test ==="
+            ssh ubuntu@${{ secrets.NGINX_PUBLIC_IP }} \
+              "curl -f http://${{/ secrets.FASTAPI_PRIVATE_IP }}:8000"
+
+            echo "=== Domain Health Check ==="
+            curl -f http://starmin.shop/health
