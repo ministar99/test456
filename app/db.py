@@ -5,14 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-#DB_USER = os.getenv("DB_USER", "fastapiid")
-#DB_PASSWORD = os.getenv("DB_PASSWORD", "fastapipw")
-#DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
-#DB_PORT = os.getenv("DB_PORT", "3306")
-#DB_NAME = os.getenv("DB_NAME", "moviesdb")
+# 이 부분이 핵심
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_NAME = os.getenv("DB_NAME")
 
-# DATABASE_URL = f"mysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
-DATABASE_URL = "mysql+pymysql://root:32655190@localhost:3306/moviesdb"
+DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+
+
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
